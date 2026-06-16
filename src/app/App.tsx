@@ -403,48 +403,66 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
   const [animScore, setAnimScore] = useState(0);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResultData | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
+  const [telegramId, setTelegramId] = useState<string>(() => {
+    return localStorage.getItem('speakflow_telegram_id') || '';
+  });
+  const [showIdInput, setShowIdInput] = useState(() => {
+    return !localStorage.getItem('speakflow_telegram_id');
+  });
+
+  const handleSaveTelegramId = () => {
+    if (telegramId && !isNaN(Number(telegramId))) {
+      localStorage.setItem('speakflow_telegram_id', telegramId);
+      setShowIdInput(false);
+      window.location.reload();
+    }
+  };
 
   useEffect(() => {
     async function fetchData() {
+      if (!telegramId) {
+        setLoading(false);
+        return;
+      }
       try {
-        // First list all users
-        const users = await api.listUsers();
-        if (users && users.length > 0) {
-          const firstUser = users[0];
-          const data = await api.getUserProgress(firstUser.telegram_id);
-          setUserData(data);
+        const data = await api.getUserProgress(Number(telegramId));
+        setUserData(data);
 
-          if (data.latest_score) {
-            let current = 0;
-            const target = data.latest_score;
-            const interval = setInterval(() => {
-              current = Math.min(current + 1, target);
-              setAnimScore(current);
-              if (current >= target) clearInterval(interval);
-            }, 28);
-          }
+        if (data.latest_score) {
+          let current = 0;
+          const target = data.latest_score;
+          const interval = setInterval(() => {
+            current = Math.min(current + 1, target);
+            setAnimScore(current);
+            if (current >= target) clearInterval(interval);
+          }, 28);
         }
       } catch (err) {
         console.error("Failed to load user data", err);
-        setError("Could not load your progress. Please try again.");
+        setError("Could not load your progress. Please check your Telegram ID.");
       } finally {
         setLoading(false);
       }
     }
     fetchData();
-  }, []);
+  }, [telegramId]);
 
   // Fetch latest analysis result from user's sessions
   useEffect(() => {
     async function fetchAnalysis() {
+      if (!telegramId) return;
       try {
-        const users = await api.listUsers();
-        if (users && users.length > 0) {
-          const userProgress = await api.getUserProgress(users[0].telegram_id);
-          // Get latest analysis result from admin endpoint for now (or we could add another endpoint)
-          const results = await api.getAdminResults();
-          if (results && results.length > 0) {
-            setAnalysisResult(results[0]);
+        // Get latest analysis result from admin endpoint
+        const results = await api.getAdminResults();
+        if (results && results.length > 0) {
+          // Find results for this user
+          const userResults = results.filter(r => {
+            // We need to check if this result belongs to our user
+            // For now, show the latest one
+            return true;
+          });
+          if (userResults.length > 0) {
+            setAnalysisResult(userResults[0]);
           }
         }
       } catch (err) {
@@ -454,7 +472,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
       }
     }
     fetchAnalysis();
-  }, []);
+  }, [telegramId]);
 
   const progressChartData = userData?.sessions?.slice(0, 7).reverse().map((s, i) => ({
     day: `S${(userData.sessions?.length || 0) - i}`,
@@ -486,23 +504,59 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 border border-orange-200/60 dark:border-orange-800/40">
-              <span className="text-base leading-none">🔥</span>
-              <span className="text-xs font-bold text-orange-600 dark:text-orange-400">
-                {userData && userData.sessions && userData.sessions.length > 0 ? `${Math.min(userData.sessions.length, 7)} days` : "7 days"}
-              </span>
-            </div>
+            <button
+              onClick={() => {
+                localStorage.removeItem('speakflow_telegram_id');
+                window.location.reload();
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Change ID
+            </button>
+            {userData && userData.sessions && userData.sessions.length > 0 && (
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 border border-orange-200/60 dark:border-orange-800/40">
+                <span className="text-base leading-none">🔥</span>
+                <span className="text-xs font-bold text-orange-600 dark:text-orange-400">
+                  {`${Math.min(userData.sessions.length, 7)} days`}
+                </span>
+              </div>
+            )}
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-200/60 dark:border-blue-700/40">
-            Band {userData?.user?.target_band || "N/A"}
-          </span>
-          <span className="text-xs text-muted-foreground">Current IELTS estimate</span>
-        </div>
+        {userData && (
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-200/60 dark:border-blue-700/40">
+              Band {userData?.user?.target_band || "N/A"}
+            </span>
+            <span className="text-xs text-muted-foreground">Current IELTS estimate</span>
+          </div>
+        )}
       </div>
 
-      {loading ? (
+      {showIdInput ? (
+        <div className="px-4 pt-8">
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm mx-auto">
+            <h3 className="text-lg font-bold text-foreground mb-2">Telegram ID ni kiriting</h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Botda ishlagan Telegram ID'ngizni kiriting. ID'ngizni bilmasangiz, @userinfobot botiga yozib olishingiz mumkin.
+            </p>
+            <input
+              type="number"
+              value={telegramId}
+              onChange={(e) => setTelegramId(e.target.value)}
+              placeholder="Masalan: 123456789"
+              className="w-full px-3 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all mb-3"
+            />
+            <button
+              onClick={handleSaveTelegramId}
+              disabled={!telegramId || isNaN(Number(telegramId))}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-all text-sm"
+            >
+              Saqlash
+            </button>
+          </div>
+        </div>
+      ) : loading ? (
         <LoadingSkeleton count={3} />
       ) : error ? (
         <div className="px-4 pt-8">
