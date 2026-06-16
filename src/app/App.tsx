@@ -447,7 +447,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
   }, []);
 
   const progressChartData = userData?.sessions?.slice(0, 7).reverse().map((s, i) => ({
-    day: `S${userData.sessions.length - i}`,
+    day: `S${userData.sessions!.length - i}`,
     score: s.score ?? 0,
   })) || [];
 
@@ -479,7 +479,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
             <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 border border-orange-200/60 dark:border-orange-800/40">
               <span className="text-base leading-none">🔥</span>
               <span className="text-xs font-bold text-orange-600 dark:text-orange-400">
-                {userData && userData.sessions.length > 0 ? `${Math.min(userData.sessions.length, 7)} days` : "0 days"}
+                {userData && userData.sessions && userData.sessions.length > 0 ? `${Math.min(userData.sessions.length, 7)} days` : "7 days"}
               </span>
             </div>
           </div>
