@@ -20,6 +20,12 @@ export const api = {
   },
 
   // Progress endpoints
+  async listUsers() {
+    const res = await fetch(`${API_BASE_URL}/progress/users`);
+    if (!res.ok) throw new Error("Failed to list users");
+    return res.json();
+  },
+
   async getUserProgress(telegramId: number) {
     const res = await fetch(`${API_BASE_URL}/progress/user/${telegramId}`);
     if (!res.ok) throw new Error("Failed to get progress");

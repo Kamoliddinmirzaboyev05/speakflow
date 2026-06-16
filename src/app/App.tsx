@@ -407,17 +407,22 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
   useEffect(() => {
     async function fetchData() {
       try {
-        const data = await api.getUserProgress(12345);
-        setUserData(data);
+        // First list all users
+        const users = await api.listUsers();
+        if (users && users.length > 0) {
+          const firstUser = users[0];
+          const data = await api.getUserProgress(firstUser.telegram_id);
+          setUserData(data);
 
-        if (data.latest_score) {
-          let current = 0;
-          const target = data.latest_score;
-          const interval = setInterval(() => {
-            current = Math.min(current + 1, target);
-            setAnimScore(current);
-            if (current >= target) clearInterval(interval);
-          }, 28);
+          if (data.latest_score) {
+            let current = 0;
+            const target = data.latest_score;
+            const interval = setInterval(() => {
+              current = Math.min(current + 1, target);
+              setAnimScore(current);
+              if (current >= target) clearInterval(interval);
+            }, 28);
+          }
         }
       } catch (err) {
         console.error("Failed to load user data", err);
@@ -429,13 +434,18 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
     fetchData();
   }, []);
 
-  // Fetch latest analysis result for skill breakdown, mistakes, vocab
+  // Fetch latest analysis result from user's sessions
   useEffect(() => {
     async function fetchAnalysis() {
       try {
-        const results = await api.getAdminResults();
-        if (results && results.length > 0) {
-          setAnalysisResult(results[0]);
+        const users = await api.listUsers();
+        if (users && users.length > 0) {
+          const userProgress = await api.getUserProgress(users[0].telegram_id);
+          // Get latest analysis result from admin endpoint for now (or we could add another endpoint)
+          const results = await api.getAdminResults();
+          if (results && results.length > 0) {
+            setAnalysisResult(results[0]);
+          }
         }
       } catch (err) {
         console.error("Failed to load analysis data", err);
@@ -449,7 +459,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
   const progressChartData = userData?.sessions?.slice(0, 7).reverse().map((s, i) => ({
     day: `S${(userData.sessions?.length || 0) - i}`,
     score: s.score ?? 0,
-  })) || [];
+  })) || progressData;
 
   const skillScores = analysisResult?.analysis_data?.skill_scores;
   const skillsList = skillScores
