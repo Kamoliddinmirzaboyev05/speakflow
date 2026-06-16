@@ -32,6 +32,16 @@ export const api = {
     return res.json();
   },
 
+  async getWebAppProgress(initData: string) {
+    const res = await fetch(`${API_BASE_URL}/progress/webapp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ init_data: initData }),
+    });
+    if (!res.ok) throw new Error("Failed to get webapp progress");
+    return res.json();
+  },
+
   // Admin endpoints
   async getAdminUsers() {
     const res = await fetch(`${API_BASE_URL}/admin/users`);

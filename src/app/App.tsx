@@ -42,6 +42,27 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 
+// Telegram WebApp type definitions
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp: {
+        ready: () => void;
+        expand: () => void;
+        initData: string;
+        initDataUnsafe: {
+          user?: {
+            id: number;
+            first_name: string;
+            last_name?: string;
+            username?: string;
+          };
+        };
+      };
+    };
+  }
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type View = "dashboard" | "practice" | "admin-login" | "admin" | "student-detail";
@@ -397,85 +418,88 @@ function PracticeScreen({ onBack }: { onBack: () => void }) {
 // ─── Screen 1: Dashboard ──────────────────────────────────────────────────────
 
 function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) {
-  const [userData, setUserData] = useState<UserProgress | null>(null);
+  const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [animScore, setAnimScore] = useState(0);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResultData | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(true);
-  const [telegramId, setTelegramId] = useState<string>(() => {
-    return localStorage.getItem('speakflow_telegram_id') || '';
-  });
-  const [showIdInput, setShowIdInput] = useState(() => {
-    return !localStorage.getItem('speakflow_telegram_id');
-  });
-
-  const handleSaveTelegramId = () => {
-    if (telegramId && !isNaN(Number(telegramId))) {
-      localStorage.setItem('speakflow_telegram_id', telegramId);
-      setShowIdInput(false);
-      window.location.reload();
-    }
-  };
+  const [isWebApp, setIsWebApp] = useState(false);
 
   useEffect(() => {
+    // Initialize Telegram WebApp
+    let initData = '';
+    if (window.Telegram && window.Telegram.WebApp) {
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand(); // Mini App ni to'liq ekranli qilish
+      setIsWebApp(true);
+      initData = window.Telegram.WebApp.initData;
+    }
+
     async function fetchData() {
-      if (!telegramId) {
-        setLoading(false);
-        return;
-      }
       try {
-        const data = await api.getUserProgress(Number(telegramId));
-        setUserData(data);
+        if (initData) {
+          // Telegram Mini App orqali kirgan - webapp endpointidan foydalanish
+          const data = await api.getWebAppProgress(initData);
+          setUserData(data);
+          
+          if (data.latest_score) {
+            let current = 0;
+            const target = data.latest_score;
+            const interval = setInterval(() => {
+              current = Math.min(current + 1, target);
+              setAnimScore(current);
+              if (current >= target) clearInterval(interval);
+            }, 28);
+          }
 
-        if (data.latest_score) {
-          let current = 0;
-          const target = data.latest_score;
-          const interval = setInterval(() => {
-            current = Math.min(current + 1, target);
-            setAnimScore(current);
-            if (current >= target) clearInterval(interval);
-          }, 28);
-        }
-      } catch (err) {
-        console.error("Failed to load user data", err);
-        setError("Could not load your progress. Please check your Telegram ID.");
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, [telegramId]);
+          if (data.latest_analysis) {
+            setAnalysisResult(data.latest_analysis);
+          }
+        } else {
+          // Brauzerda to'g'ridan-to'g'ri ochilgan - eski usul (localStorage)
+          const savedId = localStorage.getItem('speakflow_telegram_id');
+          if (savedId) {
+            const data = await api.getUserProgress(Number(savedId));
+            if (data && !data.error) {
+              setUserData(data);
+              
+              if (data.latest_score) {
+                let current = 0;
+                const target = data.latest_score;
+                const interval = setInterval(() => {
+                  current = Math.min(current + 1, target);
+                  setAnimScore(current);
+                  if (current >= target) clearInterval(interval);
+                }, 28);
+              }
 
-  // Fetch latest analysis result from user's sessions
-  useEffect(() => {
-    async function fetchAnalysis() {
-      if (!telegramId) return;
-      try {
-        const results: AnalysisResultData[] = await api.getAdminResults();
-        if (results && results.length > 0 && userData?.sessions) {
-          // Get session IDs belonging to this user
-          const userSessionIds = new Set(userData.sessions.map(s => s.id));
-          // Find results for this user by matching session IDs
-          const userResults = results.filter((r: AnalysisResultData) =>
-            userSessionIds.has(r.session_id)
-          );
-          if (userResults.length > 0) {
-            // Sort by date descending and take the latest
-            userResults.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-            setAnalysisResult(userResults[0]);
+              // Eski usulda analysis result ni olish
+              const results: AnalysisResultData[] = await api.getAdminResults();
+              if (results && results.length > 0 && data?.sessions) {
+                const userSessionIds = new Set(data.sessions.map((s: any) => s.id));
+                const userResults = results.filter((r: AnalysisResultData) =>
+                  userSessionIds.has(r.session_id)
+                );
+                if (userResults.length > 0) {
+                  userResults.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                  setAnalysisResult(userResults[0]);
+                }
+              }
+            }
           }
         }
       } catch (err) {
-        console.error("Failed to load analysis data", err);
+        console.error("Failed to load user data", err);
+        setError("Ma'lumotlarni yuklashda xatolik. Iltimos, qayta urinib ko'ring.");
       } finally {
-        setAnalysisLoading(false);
+        setLoading(false);
       }
     }
-    fetchAnalysis();
-  }, [telegramId, userData]);
 
-  const progressChartData = userData?.sessions?.slice(0, 7).reverse().map((s, i) => ({
+    fetchData();
+  }, []);
+
+  const progressChartData = userData?.sessions?.slice(0, 7).reverse().map((s: any, i: number) => ({
     day: `S${(userData.sessions?.length || 0) - i}`,
     score: s.score ?? 0,
   })) || [];
@@ -487,6 +511,18 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
 
   const mistakes = analysisResult?.analysis_data?.mistakes || [];
   const vocab = analysisResult?.analysis_data?.vocabulary_upgrades || [];
+
+  // Agar TMA emas va ID saqlanmagan bo'lsa, ID kiritish formasini ko'rsatish
+  const showIdInput = !isWebApp && !userData && !loading;
+
+  const [telegramId, setTelegramId] = useState<string>(localStorage.getItem('speakflow_telegram_id') || '');
+
+  const handleSaveTelegramId = () => {
+    if (telegramId && !isNaN(Number(telegramId))) {
+      localStorage.setItem('speakflow_telegram_id', telegramId);
+      window.location.reload();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background pb-10">
@@ -505,15 +541,17 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                localStorage.removeItem('speakflow_telegram_id');
-                window.location.reload();
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Change ID
-            </button>
+            {!isWebApp && (
+              <button
+                onClick={() => {
+                  localStorage.removeItem('speakflow_telegram_id');
+                  window.location.reload();
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Change ID
+              </button>
+            )}
             {userData && userData.sessions && userData.sessions.length > 0 && (
               <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 border border-orange-200/60 dark:border-orange-800/40">
                 <span className="text-base leading-none">🔥</span>
@@ -698,7 +736,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
             </div>
           )}
 
-          {!analysisLoading && mistakes.length === 0 && vocab.length === 0 && skillsList.length === 0 && (
+          {mistakes.length === 0 && vocab.length === 0 && skillsList.length === 0 && (
             <div className="bg-card border border-border rounded-2xl p-4">
               <EmptyState
                 icon={<MessageSquare size={20} />}
