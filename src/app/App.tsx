@@ -65,7 +65,7 @@ declare global {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type View = "dashboard" | "practice" | "admin-login" | "admin" | "student-detail";
+type View = "dashboard" | "admin-login" | "admin" | "student-detail";
 type AdminTab = "overview" | "students" | "feedback" | "analytics";
 
 interface UserData {
@@ -384,40 +384,9 @@ function LoadingSkeleton({ count = 1 }: { count?: number }) {
   );
 }
 
-// ─── Screen: Practice (placeholder) ───────────────────────────────────────────
-
-function PracticeScreen({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="px-4 pt-5 pb-4 bg-card border-b border-border sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-            aria-label="Go back"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <div>
-            <p className="text-sm font-bold text-foreground">Practice</p>
-            <p className="text-xs text-muted-foreground">Start a new speaking session</p>
-          </div>
-        </div>
-      </div>
-      <div className="px-4 pt-8">
-        <EmptyState
-          icon={<Mic size={24} />}
-          title="Practice Mode"
-          description="Recording and practice features will be available here. Connect the Telegram bot to start practicing."
-        />
-      </div>
-    </div>
-  );
-}
-
 // ─── Screen 1: Dashboard ──────────────────────────────────────────────────────
 
-function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) {
+function DashboardScreen() {
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -463,7 +432,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
       setShowPhoneInput(false);
     } catch (err) {
       console.error("Failed to load user data", err);
-      setError("Ma'lumotlarni yuklashda xatolik. Iltimos, qayta urinib ko'ring.");
+      setError("Ma'lumotlarni yuklashda xatolik. Iltimos, telefon raqamingizni kiriting.");
       setShowPhoneInput(true);
     } finally {
       setLoading(false);
@@ -538,55 +507,16 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
           >
             Saqlash va ko'rsatish
           </button>
+          {error && (
+            <p className="text-xs text-red-500 mt-3 text-center">{error}</p>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-10">
-      {/* Header */}
-      <div className="px-4 pt-5 pb-4 bg-card border-b border-border sticky top-0 z-10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-              {userData?.user?.first_name?.charAt(0) || "J"}
-            </div>
-            <div>
-              <p className="text-sm font-bold text-foreground leading-tight">
-                Salom, {userData?.user?.first_name || "User"} 👋
-              </p>
-              <p className="text-xs text-muted-foreground">Keep up the great work!</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {!isWebApp && (
-              <button
-                onClick={handleChangePhone}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Raqamni o'zgartirish
-              </button>
-            )}
-            {userData && userData.sessions && userData.sessions.length > 0 && (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 border border-orange-200/60 dark:border-orange-800/40">
-                <span className="text-base leading-none">🔥</span>
-                <span className="text-xs font-bold text-orange-600 dark:text-orange-400">
-                  {`${Math.min(userData.sessions.length, 7)} days`}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-        {userData && (
-          <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-200/60 dark:border-blue-700/40">
-              Band {userData?.user?.target_band || "N/A"}
-            </span>
-            <span className="text-xs text-muted-foreground">Current IELTS estimate</span>
-          </div>
-        )}
-      </div>
+    <div className="pb-10">
 
       {loading ? (
         <LoadingSkeleton count={3} />
@@ -612,15 +542,9 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
               <Target size={12} className="opacity-75" />
               <span className="text-xs font-semibold opacity-75 uppercase tracking-wider">Today's Focus</span>
             </div>
-            <p className="text-base font-bold leading-snug mb-4">
+            <p className="text-base font-bold leading-snug">
               Work on your grammar — practice regularly!
             </p>
-            <button 
-              onClick={onStartPractice} 
-              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 active:bg-white/10 transition-all rounded-xl px-4 py-2.5 text-sm font-semibold backdrop-blur-sm"
-            >
-              Start Practice <ArrowRight size={14} />
-            </button>
           </div>
 
           {/* Progress Chart */}
@@ -752,17 +676,28 @@ function AdminLoginScreen({ onLogin }: { onLogin: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       setError("Please enter email and password.");
       return;
     }
     setError("");
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const res = await fetch("http://localhost:8000/api/v1/auth/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) throw new Error("Invalid credentials");
+      const data = await res.json();
+      localStorage.setItem("adminToken", data.token);
       onLogin();
-    }, 700);
+    } catch {
+      setError("Invalid email or password.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1686,6 +1621,77 @@ function AdminAnalytics() {
   );
 }
 
+// Navbar Component
+function Navbar({ title, onMenuClick }: { title: string; onMenuClick: () => void }) {
+  return (
+    <div className="sticky top-0 z-40 bg-card border-b border-border px-4 py-3 flex items-center justify-between">
+      <button 
+        onClick={onMenuClick}
+        className="p-2 rounded-lg hover:bg-muted transition-colors"
+      >
+        <Menu size={22} />
+      </button>
+      <h1 className="text-lg font-bold text-foreground">{title}</h1>
+      <div className="w-10" /> {/* Spacer */}
+    </div>
+  );
+}
+
+// Sidebar Component
+function Sidebar({ 
+  isOpen, 
+  onClose, 
+  currentView, 
+  setView 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  currentView: View; 
+  setView: (v: View) => void;
+}) {
+  const navItems = [
+    { id: "dashboard", label: "Asosiy", Icon: TrendingUp },
+  ];
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      <div 
+        className="fixed inset-0 z-40 bg-black/50 animate-in fade-in" 
+        onClick={onClose}
+      />
+      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border shadow-xl animate-in slide-in-from-left">
+        <div className="px-6 py-5 border-b border-border">
+          <h2 className="text-xl font-bold text-foreground">SpeakFlow</h2>
+          <p className="text-xs text-muted-foreground">IELTS Speaking Coach</p>
+        </div>
+        <nav className="p-3 space-y-1">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setView(item.id as View);
+                onClose();
+              }}
+              className={`
+                w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all
+                ${currentView === item.id 
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-semibold" 
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }
+              `}
+            >
+              <item.Icon size={20} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
+    </>
+  );
+}
+
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -1693,6 +1699,7 @@ export default function App() {
   const [adminTab, setAdminTab] = useState<AdminTab>("overview");
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
   const [dark, setDark] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -1712,89 +1719,30 @@ export default function App() {
     setSelectedStudent(null);
   }
 
+  const getTitle = () => {
+    switch (view) {
+      case "dashboard": return "Asosiy";
+      default: return "SpeakFlow";
+    }
+  };
+
   return (
-    <div className="font-['Inter'] antialiased">
-      {/* Nav bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-md border-b border-border px-2 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 overflow-x-auto">
-        <span className="text-xs text-muted-foreground font-semibold mr-1 sm:mr-1.5 shrink-0">SpeakFlow</span>
-        {[
-          { label: "📱 Dashboard", action: () => { setView("dashboard"); } },
-          { label: "🔐 Admin", action: () => { setView("admin-login"); } },
-          { label: "🖥 Overview", action: () => { setView("admin"); setAdminTab("overview"); setSelectedStudent(null); } },
-          { label: "👤 Student", action: () => { handleSelectStudent(1); } },
-          { label: "📋 Feedback", action: () => { setView("admin"); setAdminTab("feedback"); setSelectedStudent(null); } },
-        ].map((s) => {
-          const isActive =
-            (s.label.includes("Dashboard") && view === "dashboard") ||
-            (s.label.includes("Admin") && view === "admin-login") ||
-            (s.label.includes("Overview") && isAdmin && adminTab === "overview" && view === "admin") ||
-            (s.label.includes("Student") && view === "student-detail") ||
-            (s.label.includes("Feedback") && isAdmin && adminTab === "feedback");
-
-          return (
-            <button
-              key={s.label}
-              onClick={s.action}
-              className={`px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
-                isActive
-                  ? "bg-blue-600 text-white"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {s.label}
-            </button>
-          );
-        })}
-        <button
-          onClick={() => setDark(!dark)}
-          className="ml-auto p-1.5 rounded-lg bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
-          title="Toggle dark mode"
-        >
-          {dark ? <Sun size={13} /> : <Moon size={13} />}
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="pt-10">
+    <div className="font-['Inter'] antialiased min-h-screen bg-background">
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)} 
+        currentView={view} 
+        setView={setView} 
+      />
+      <Navbar 
+        title={getTitle()} 
+        onMenuClick={() => setSidebarOpen(true)} 
+      />
+      {/* Content (Telegram mini-app mobile-first) */}
+      <div>
         {view === "dashboard" && (
-          <div className="max-w-[400px] mx-auto bg-background min-h-screen border-x border-border/50 shadow-sm">
-            <DashboardScreen onStartPractice={() => setView("practice")} />
-          </div>
-        )}
-
-        {view === "practice" && (
-          <div className="bg-background min-h-screen">
-            <PracticeScreen onBack={() => setView("dashboard")} />
-          </div>
-        )}
-
-        {view === "admin-login" && (
-          <AdminLoginScreen onLogin={() => { setView("admin"); setAdminTab("overview"); }} />
-        )}
-
-        {(isAdmin) && (
-          <div className="flex min-h-[calc(100vh-40px)]">
-            <AdminSidebar
-              activeTab={adminTab}
-              setActiveTab={handleAdminTabChange}
-              onLogout={() => setView("admin-login")}
-            />
-            <div className="flex-1 min-w-0">
-              {view === "admin" && adminTab === "overview" && (
-                <AdminOverview onSelectStudent={handleSelectStudent} />
-              )}
-              {view === "admin" && adminTab === "students" && (
-                <AdminOverview onSelectStudent={handleSelectStudent} />
-              )}
-              {view === "admin" && adminTab === "feedback" && <FeedbackReview />}
-              {view === "admin" && adminTab === "analytics" && <AdminAnalytics />}
-              {view === "student-detail" && selectedStudent !== null && (
-                <StudentDetail
-                  studentId={selectedStudent}
-                  onBack={() => { setView("admin"); setAdminTab("overview"); setSelectedStudent(null); }}
-                />
-              )}
-            </div>
+          <div className="w-full max-w-[430px] mx-auto bg-background">
+            <DashboardScreen />
           </div>
         )}
       </div>

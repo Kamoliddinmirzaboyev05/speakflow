@@ -1,5 +1,13 @@
 const API_BASE_URL = "http://localhost:8000/api/v1";
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem("adminToken");
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+}
+
 export const api = {
   // Analysis endpoints
   async analyzeSpeech(request: {
@@ -8,6 +16,7 @@ export const api = {
     english_level: string;
     target_band: string;
     practice_mode: string;
+    question?: string;
   }) {
     const res = await fetch(`${API_BASE_URL}/analysis/`, {
       method: "POST",
@@ -53,25 +62,33 @@ export const api = {
 
   // Admin endpoints
   async getAdminUsers() {
-    const res = await fetch(`${API_BASE_URL}/admin/users`);
+    const res = await fetch(`${API_BASE_URL}/admin/users`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) throw new Error("Failed to get users");
     return res.json();
   },
 
   async getAdminSessions() {
-    const res = await fetch(`${API_BASE_URL}/admin/sessions`);
+    const res = await fetch(`${API_BASE_URL}/admin/sessions`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) throw new Error("Failed to get sessions");
     return res.json();
   },
 
   async getAdminResults() {
-    const res = await fetch(`${API_BASE_URL}/admin/results`);
+    const res = await fetch(`${API_BASE_URL}/admin/results`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) throw new Error("Failed to get results");
     return res.json();
   },
 
   async getAdminStats() {
-    const res = await fetch(`${API_BASE_URL}/admin/stats`);
+    const res = await fetch(`${API_BASE_URL}/admin/stats`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) throw new Error("Failed to get stats");
     return res.json();
   },
