@@ -451,25 +451,6 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
   useEffect(() => {
     async function fetchAnalysis() {
       if (!telegramId) return;
-      try {
-        // Get latest analysis result from admin endpoint
-        const results = await api.getAdminResults();
-        if (results && results.length > 0) {
-          // Find results for this user
-          const userResults = results.filter(r => {
-            // We need to check if this result belongs to our user
-            // For now, show the latest one
-            return true;
-          });
-          if (userResults.length > 0) {
-            setAnalysisResult(userResults[0]);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load analysis data", err);
-      } finally {
-        setAnalysisLoading(false);
-      }
     }
     fetchAnalysis();
   }, [telegramId]);
