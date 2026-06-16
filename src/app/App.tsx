@@ -459,7 +459,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
   const progressChartData = userData?.sessions?.slice(0, 7).reverse().map((s, i) => ({
     day: `S${(userData.sessions?.length || 0) - i}`,
     score: s.score ?? 0,
-  })) || progressData;
+  })) || [];
 
   const skillScores = analysisResult?.analysis_data?.skill_scores;
   const skillsList = skillScores
