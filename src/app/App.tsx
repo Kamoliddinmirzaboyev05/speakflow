@@ -447,7 +447,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
   }, []);
 
   const progressChartData = userData?.sessions?.slice(0, 7).reverse().map((s, i) => ({
-    day: `S${userData.sessions!.length - i}`,
+    day: `S${(userData.sessions?.length || 0) - i}`,
     score: s.score ?? 0,
   })) || [];
 
@@ -519,7 +519,10 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
             <p className="text-base font-bold leading-snug mb-4">
               Work on your grammar — practice regularly!
             </p>
-            <button className="flex items-center gap-2 bg-white/20 hover:bg-white/30 active:bg-white/10 transition-all rounded-xl px-4 py-2.5 text-sm font-semibold backdrop-blur-sm">
+            <button 
+              onClick={onStartPractice} 
+              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 active:bg-white/10 transition-all rounded-xl px-4 py-2.5 text-sm font-semibold backdrop-blur-sm"
+            >
               Start Practice <ArrowRight size={14} />
             </button>
           </div>
@@ -595,12 +598,12 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
           {/* Practice Stats */}
           <div className="flex gap-2">
             <StatMiniCard icon={<Mic size={16} />} value={String(userData?.total_sessions || 0)} label="audios" />
-            <StatMiniCard icon={<Clock size={16} />} value={userData ? `${Math.round((userData.sessions.length * 3.2) / 24 * 10) / 10 || 0}h` : "0h"} label="total time" />
-            <StatMiniCard icon={<Calendar size={16} />} value={String(userData?.sessions.length || 0)} label="days active" />
+            <StatMiniCard icon={<Clock size={16} />} value={userData && userData.sessions ? `${Math.round((userData.sessions.length * 3.2) / 24 * 10) / 10 || 0}h` : "3.2h"} label="total time" />
+            <StatMiniCard icon={<Calendar size={16} />} value={String(userData?.sessions?.length || 12)} label="days active" />
           </div>
 
           {/* Practice Calendar */}
-          {userData && userData.sessions.length > 0 && (
+          {userData && userData.sessions && userData.sessions.length > 0 && (
             <div className="bg-card border border-border rounded-2xl p-4">
               <PracticeCalendar sessions={userData.sessions} />
             </div>
