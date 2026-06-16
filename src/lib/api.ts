@@ -1,4 +1,3 @@
-
 const API_BASE_URL = "http://localhost:8000/api/v1";
 
 export const api = {
@@ -39,6 +38,16 @@ export const api = {
       body: JSON.stringify({ init_data: initData }),
     });
     if (!res.ok) throw new Error("Failed to get webapp progress");
+    return res.json();
+  },
+
+  async getProgressByPhone(phoneNumber: string) {
+    const res = await fetch(`${API_BASE_URL}/progress/by-phone`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone_number: phoneNumber }),
+    });
+    if (!res.ok) throw new Error("Failed to get progress");
     return res.json();
   },
 

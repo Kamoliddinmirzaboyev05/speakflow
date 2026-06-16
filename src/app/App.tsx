@@ -422,81 +422,71 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [animScore, setAnimScore] = useState(0);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResultData | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [isWebApp, setIsWebApp] = useState(false);
+  const [showPhoneInput, setShowPhoneInput] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState<string>(() => {
+    return localStorage.getItem('speakflow_phone_number') || '';
+  });
+
+  const loadData = async (initData?: string, phone?: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      let data;
+      if (initData) {
+        data = await api.getWebAppProgress(initData);
+      } else if (phone) {
+        data = await api.getProgressByPhone(phone.trim());
+      } else {
+        setShowPhoneInput(true);
+        setLoading(false);
+        return;
+      }
+
+      setUserData(data);
+      
+      if (data.latest_score) {
+        let current = 0;
+        const target = data.latest_score;
+        const interval = setInterval(() => {
+          current = Math.min(current + 1, target);
+          setAnimScore(current);
+          if (current >= target) clearInterval(interval);
+        }, 28);
+      }
+
+      if (data.latest_analysis) {
+        setAnalysisResult(data.latest_analysis);
+      }
+
+      setShowPhoneInput(false);
+    } catch (err) {
+      console.error("Failed to load user data", err);
+      setError("Ma'lumotlarni yuklashda xatolik. Iltimos, qayta urinib ko'ring.");
+      setShowPhoneInput(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Initialize Telegram WebApp
     let initData = '';
     if (window.Telegram && window.Telegram.WebApp) {
       window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand(); // Mini App ni to'liq ekranli qilish
+      window.Telegram.WebApp.expand();
       setIsWebApp(true);
       initData = window.Telegram.WebApp.initData;
     }
 
-    async function fetchData() {
-      try {
-        if (initData) {
-          // Telegram Mini App orqali kirgan - webapp endpointidan foydalanish
-          const data = await api.getWebAppProgress(initData);
-          setUserData(data);
-          
-          if (data.latest_score) {
-            let current = 0;
-            const target = data.latest_score;
-            const interval = setInterval(() => {
-              current = Math.min(current + 1, target);
-              setAnimScore(current);
-              if (current >= target) clearInterval(interval);
-            }, 28);
-          }
-
-          if (data.latest_analysis) {
-            setAnalysisResult(data.latest_analysis);
-          }
-        } else {
-          // Brauzerda to'g'ridan-to'g'ri ochilgan - eski usul (localStorage)
-          const savedId = localStorage.getItem('speakflow_telegram_id');
-          if (savedId) {
-            const data = await api.getUserProgress(Number(savedId));
-            if (data && !data.error) {
-              setUserData(data);
-              
-              if (data.latest_score) {
-                let current = 0;
-                const target = data.latest_score;
-                const interval = setInterval(() => {
-                  current = Math.min(current + 1, target);
-                  setAnimScore(current);
-                  if (current >= target) clearInterval(interval);
-                }, 28);
-              }
-
-              // Eski usulda analysis result ni olish
-              const results: AnalysisResultData[] = await api.getAdminResults();
-              if (results && results.length > 0 && data?.sessions) {
-                const userSessionIds = new Set(data.sessions.map((s: any) => s.id));
-                const userResults = results.filter((r: AnalysisResultData) =>
-                  userSessionIds.has(r.session_id)
-                );
-                if (userResults.length > 0) {
-                  userResults.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-                  setAnalysisResult(userResults[0]);
-                }
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load user data", err);
-        setError("Ma'lumotlarni yuklashda xatolik. Iltimos, qayta urinib ko'ring.");
-      } finally {
-        setLoading(false);
-      }
+    if (initData) {
+      loadData(initData);
+    } else if (phoneNumber) {
+      loadData(undefined, phoneNumber);
+    } else {
+      setLoading(false);
+      setShowPhoneInput(true);
     }
-
-    fetchData();
   }, []);
 
   const progressChartData = userData?.sessions?.slice(0, 7).reverse().map((s: any, i: number) => ({
@@ -506,23 +496,52 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
 
   const skillScores = analysisResult?.analysis_data?.skill_scores;
   const skillsList = skillScores
-    ? Object.entries(skillScores).map(([label, score]) => ({ label, score }))
+    ? Object.entries(skillScores).map(([label, score]) => ({ label, score: score as number }))
     : [];
 
   const mistakes = analysisResult?.analysis_data?.mistakes || [];
   const vocab = analysisResult?.analysis_data?.vocabulary_upgrades || [];
 
-  // Agar TMA emas va ID saqlanmagan bo'lsa, ID kiritish formasini ko'rsatish
-  const showIdInput = !isWebApp && !userData && !loading;
-
-  const [telegramId, setTelegramId] = useState<string>(localStorage.getItem('speakflow_telegram_id') || '');
-
-  const handleSaveTelegramId = () => {
-    if (telegramId && !isNaN(Number(telegramId))) {
-      localStorage.setItem('speakflow_telegram_id', telegramId);
-      window.location.reload();
+  const handleSavePhoneNumber = () => {
+    if (phoneNumber.trim()) {
+      localStorage.setItem('speakflow_phone_number', phoneNumber.trim());
+      loadData(undefined, phoneNumber.trim());
     }
   };
+
+  const handleChangePhone = () => {
+    localStorage.removeItem('speakflow_phone_number');
+    setShowPhoneInput(true);
+    setPhoneNumber('');
+    setUserData(null);
+  };
+
+  if (showPhoneInput) {
+    return (
+      <div className="min-h-screen bg-background px-4 pt-8">
+        <div className="bg-card border border-border rounded-2xl p-6 max-w-sm mx-auto">
+          <h3 className="text-lg font-bold text-foreground mb-2">Telefon raqamingizni kiriting</h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Botda ro'yxatdan o'tgan telefon raqamingizni kiriting
+          </p>
+          <input
+            type="tel"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            placeholder="+998901234567"
+            className="w-full px-3 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all mb-3"
+          />
+          <button
+            onClick={handleSavePhoneNumber}
+            disabled={!phoneNumber.trim()}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-all text-sm"
+          >
+            Saqlash va ko'rsatish
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-10">
@@ -543,13 +562,10 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
           <div className="flex items-center gap-2">
             {!isWebApp && (
               <button
-                onClick={() => {
-                  localStorage.removeItem('speakflow_telegram_id');
-                  window.location.reload();
-                }}
+                onClick={handleChangePhone}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                Change ID
+                Raqamni o'zgartirish
               </button>
             )}
             {userData && userData.sessions && userData.sessions.length > 0 && (
@@ -572,30 +588,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
         )}
       </div>
 
-      {showIdInput ? (
-        <div className="px-4 pt-8">
-          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm mx-auto">
-            <h3 className="text-lg font-bold text-foreground mb-2">Telegram ID ni kiriting</h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              Botda ishlagan Telegram ID'ngizni kiriting. ID'ngizni bilmasangiz, @userinfobot botiga yozib olishingiz mumkin.
-            </p>
-            <input
-              type="number"
-              value={telegramId}
-              onChange={(e) => setTelegramId(e.target.value)}
-              placeholder="Masalan: 123456789"
-              className="w-full px-3 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all mb-3"
-            />
-            <button
-              onClick={handleSaveTelegramId}
-              disabled={!telegramId || isNaN(Number(telegramId))}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-all text-sm"
-            >
-              Saqlash
-            </button>
-          </div>
-        </div>
-      ) : loading ? (
+      {loading ? (
         <LoadingSkeleton count={3} />
       ) : error ? (
         <div className="px-4 pt-8">
@@ -717,7 +710,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
             <div>
               <h3 className="text-sm font-semibold text-foreground mb-3">Common Mistakes</h3>
               <div className="space-y-2">
-                {mistakes.map((m, i) => (
+                {mistakes.map((m: any, i: number) => (
                   <MistakeCard key={i} wrong={m.wrong} correct={m.correct} tag={m.type} />
                 ))}
               </div>
@@ -729,14 +722,14 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
             <div>
               <h3 className="text-sm font-semibold text-foreground mb-3">Words to Level Up</h3>
               <div className="space-y-2">
-                {vocab.map((v, i) => (
+                {vocab.map((v: any, i: number) => (
                   <VocabCard key={i} original={v.original} better={v.better} />
                 ))}
               </div>
             </div>
           )}
 
-          {mistakes.length === 0 && vocab.length === 0 && skillsList.length === 0 && (
+          {!loading && mistakes.length === 0 && vocab.length === 0 && skillsList.length === 0 && (
             <div className="bg-card border border-border rounded-2xl p-4">
               <EmptyState
                 icon={<MessageSquare size={20} />}
