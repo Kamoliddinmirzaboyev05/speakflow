@@ -473,7 +473,7 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
       }
     }
     fetchAnalysis();
-  }, [telegramId]);
+  }, [telegramId, userData]);
 
   const progressChartData = userData?.sessions?.slice(0, 7).reverse().map((s, i) => ({
     day: `S${(userData.sessions?.length || 0) - i}`,
