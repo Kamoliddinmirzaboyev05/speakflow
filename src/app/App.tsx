@@ -451,6 +451,26 @@ function DashboardScreen({ onStartPractice }: { onStartPractice?: () => void }) 
   useEffect(() => {
     async function fetchAnalysis() {
       if (!telegramId) return;
+      try {
+        const results: AnalysisResultData[] = await api.getAdminResults();
+        if (results && results.length > 0 && userData?.sessions) {
+          // Get session IDs belonging to this user
+          const userSessionIds = new Set(userData.sessions.map(s => s.id));
+          // Find results for this user by matching session IDs
+          const userResults = results.filter((r: AnalysisResultData) =>
+            userSessionIds.has(r.session_id)
+          );
+          if (userResults.length > 0) {
+            // Sort by date descending and take the latest
+            userResults.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            setAnalysisResult(userResults[0]);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load analysis data", err);
+      } finally {
+        setAnalysisLoading(false);
+      }
     }
     fetchAnalysis();
   }, [telegramId]);
