@@ -34,11 +34,15 @@ import {
   Activity,
   AlertCircle,
   Shield,
-  Menu,
   X,
   Loader2,
   ChevronLeft,
   User,
+  Flame,
+  Trophy,
+  Zap,
+  Flag,
+  TrendingDown,
 } from "lucide-react";
 import { api } from "../lib/api";
 
@@ -254,8 +258,23 @@ function StatMiniCard({ icon, value, label }: { icon: React.ReactNode; value: st
   );
 }
 
+// GitHub-style intensity: more sessions in a day => darker green.
+const PRACTICE_LEVELS = [
+  { bg: "bg-muted", text: "text-muted-foreground/60" }, // 0 sessions
+  { bg: "bg-green-200 dark:bg-green-900", text: "text-green-900 dark:text-green-200" }, // 1
+  { bg: "bg-green-300 dark:bg-green-700", text: "text-green-900 dark:text-green-100" }, // 2
+  { bg: "bg-green-500 dark:bg-green-600", text: "text-white" }, // 3
+  { bg: "bg-green-700 dark:bg-green-400 dark:text-green-950", text: "text-white" }, // 4+
+];
+
+function practiceLevel(count: number): number {
+  if (count <= 0) return 0;
+  if (count >= 4) return 4;
+  return count; // 1,2,3
+}
+
 function PracticeCalendar({ sessions }: { sessions: SessionData[] }) {
-  // Generate last 30 days calendar
+  // Generate last 30 days calendar (oldest -> today)
   const today = new Date();
   const days = Array.from({ length: 30 }, (_, i) => {
     const date = new Date(today);
@@ -263,39 +282,64 @@ function PracticeCalendar({ sessions }: { sessions: SessionData[] }) {
     return date;
   });
 
-  const sessionDates = new Set(
-    sessions.map((s) => new Date(s.created_at).toDateString())
-  );
+  // Count sessions per calendar day
+  const countByDay = new Map<string, number>();
+  for (const s of sessions) {
+    const key = new Date(s.created_at).toDateString();
+    countByDay.set(key, (countByDay.get(key) || 0) + 1);
+  }
+
+  // Pad leading cells so first day aligns under its weekday column
+  const leadingBlanks = days[0].getDay(); // 0=Sun .. 6=Sat
+  const weekdayLabels = ["S", "M", "T", "W", "T", "F", "S"];
 
   return (
     <div>
       <h3 className="text-sm font-semibold text-foreground mb-3">Practice Calendar</h3>
-      <div className="grid grid-cols-10 gap-1.5">
+
+      {/* Weekday header */}
+      <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+        {weekdayLabels.map((w, i) => (
+          <div key={i} className="text-center text-[10px] font-medium text-muted-foreground">
+            {w}
+          </div>
+        ))}
+      </div>
+
+      {/* Day cells */}
+      <div className="grid grid-cols-7 gap-1.5">
+        {Array.from({ length: leadingBlanks }).map((_, i) => (
+          <div key={`blank-${i}`} className="aspect-square" />
+        ))}
         {days.map((d, i) => {
-          const practiced = sessionDates.has(d.toDateString());
+          const count = countByDay.get(d.toDateString()) || 0;
+          const level = practiceLevel(count);
+          const { bg, text } = PRACTICE_LEVELS[level];
+          const dateLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          const title =
+            count > 0
+              ? `${dateLabel} — ${count} session${count > 1 ? "s" : ""}`
+              : `${dateLabel} — no practice`;
           return (
             <div
               key={d.toISOString()}
-              title={`${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}${practiced ? " — Practiced" : ""}`}
-              className={`aspect-square rounded-sm transition-all duration-300 ${
-                practiced
-                  ? "bg-green-500 dark:bg-green-600 hover:opacity-90"
-                  : "bg-muted hover:bg-muted-foreground/20"
-              }`}
+              title={title}
+              className={`aspect-square rounded-sm flex items-center justify-center text-[10px] font-semibold transition-all duration-300 hover:ring-2 hover:ring-green-500/40 ${bg} ${text}`}
               style={{ animationDelay: `${i * 20}ms` }}
-            />
+            >
+              {d.getDate()}
+            </div>
           );
         })}
       </div>
-      <div className="flex items-center gap-3 mt-2.5">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-muted" />
-          <span className="text-xs text-muted-foreground">Skipped</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-green-500 dark:bg-green-600" />
-          <span className="text-xs text-muted-foreground">Practiced</span>
-        </div>
+
+      {/* Legend: Less -> More */}
+      <div className="flex items-center gap-1.5 mt-3">
+        <span className="text-xs text-muted-foreground mr-0.5">Less</span>
+        {PRACTICE_LEVELS.map((lvl, i) => (
+          <div key={i} className={`w-3 h-3 rounded-sm ${lvl.bg}`} />
+        ))}
+        <span className="text-xs text-muted-foreground ml-0.5">More</span>
       </div>
     </div>
   );
@@ -471,6 +515,47 @@ function DashboardScreen() {
   const mistakes = analysisResult?.analysis_data?.mistakes || [];
   const vocab = analysisResult?.analysis_data?.vocabulary_upgrades || [];
 
+  // ── Derived user stats (all from existing session data) ───────────────────
+  const sessions: SessionData[] = userData?.sessions || [];
+  const scores = sessions
+    .map((s) => s.score)
+    .filter((n): n is number => typeof n === "number");
+  const latestScore = userData?.latest_score ?? scores[0] ?? 0;
+  const prevScore = scores.length > 1 ? scores[1] : null;
+  const scoreDelta = prevScore != null ? Math.round((latestScore - prevScore) * 10) / 10 : null;
+  const bestScore = scores.length ? Math.max(...scores) : 0;
+  const avgScore = scores.length
+    ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
+    : 0;
+
+  // Consecutive practice-day streak (ends today or yesterday)
+  const dayKeys = new Set(sessions.map((s) => new Date(s.created_at).toDateString()));
+  let streak = 0;
+  {
+    const d = new Date();
+    if (!dayKeys.has(d.toDateString())) d.setDate(d.getDate() - 1);
+    while (dayKeys.has(d.toDateString())) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    }
+  }
+
+  // Weekly goal progress (last 7 days)
+  const WEEKLY_GOAL = 5;
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+  const sessionsThisWeek = sessions.filter((s) => new Date(s.created_at) >= weekStart).length;
+  const weeklyPct = Math.min(100, Math.round((sessionsThisWeek / WEEKLY_GOAL) * 100));
+
+  // Dynamic focus suggestion based on weakest skill
+  const lowestSkill = skillsList.length
+    ? skillsList.reduce((a, b) => (b.score < a.score ? b : a))
+    : null;
+  const focusText = lowestSkill
+    ? `Eng zaif tomoningiz — ${lowestSkill.label}. Bugun shunga e'tibor bering!`
+    : "Muntazam mashq qiling — har kungi kichik qadam katta natija beradi!";
+
   const handleSavePhoneNumber = () => {
     if (phoneNumber.trim()) {
       localStorage.setItem('speakflow_phone_number', phoneNumber.trim());
@@ -540,23 +625,85 @@ function DashboardScreen() {
           <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-4 text-white shadow-md shadow-blue-500/20">
             <div className="flex items-center gap-1.5 mb-2">
               <Target size={12} className="opacity-75" />
-              <span className="text-xs font-semibold opacity-75 uppercase tracking-wider">Today's Focus</span>
+              <span className="text-xs font-semibold opacity-75 uppercase tracking-wider">Bugungi maqsad</span>
             </div>
-            <p className="text-base font-bold leading-snug">
-              Work on your grammar — practice regularly!
-            </p>
+            <p className="text-base font-bold leading-snug">{focusText}</p>
+          </div>
+
+          {/* Streak + Weekly goal */}
+          <div className="grid grid-cols-2 gap-2">
+            {/* Streak */}
+            <div className="bg-card border border-border rounded-2xl p-4">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Flame size={15} className={streak > 0 ? "text-orange-500" : "text-muted-foreground"} />
+                <span className="text-xs font-semibold text-muted-foreground">Ketma-ket</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-foreground tabular-nums">{streak}</span>
+                <span className="text-xs text-muted-foreground">kun</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1 leading-tight">
+                {streak > 0 ? "Davom eting, to'xtamang! 🔥" : "Bugun mashq qilib boshlang"}
+              </p>
+            </div>
+
+            {/* Weekly goal */}
+            <div className="bg-card border border-border rounded-2xl p-4">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Flag size={15} className="text-blue-600 dark:text-blue-400" />
+                <span className="text-xs font-semibold text-muted-foreground">Haftalik maqsad</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-foreground tabular-nums">{sessionsThisWeek}</span>
+                <span className="text-xs text-muted-foreground">/ {WEEKLY_GOAL}</span>
+              </div>
+              <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-blue-600 dark:bg-blue-500 transition-all duration-700"
+                  style={{ width: `${weeklyPct}%` }}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Progress Chart */}
           {progressChartData.length > 0 ? (
             <div className="bg-card border border-border rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-semibold text-foreground">Your Progress</h3>
-                <div className="text-xs text-muted-foreground tabular-nums">
-                  Now: <span className="text-blue-600 dark:text-blue-400 font-bold">{animScore || userData?.latest_score || 0}</span>
+              <h3 className="text-sm font-semibold text-foreground mb-3">Sizning rivojingiz</h3>
+              <div className="flex items-end justify-between mb-3">
+                <div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-bold text-foreground tabular-nums leading-none">
+                      {animScore || latestScore || 0}
+                    </span>
+                    {scoreDelta != null && scoreDelta !== 0 && (
+                      <span
+                        className={`flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+                          scoreDelta > 0
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                            : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
+                        }`}
+                      >
+                        {scoreDelta > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                        {scoreDelta > 0 ? "+" : ""}
+                        {scoreDelta}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {scoreDelta == null
+                      ? "Hozirgi ballingiz"
+                      : scoreDelta > 0
+                      ? "O'tgan sessiyaga nisbatan o'sish 🎉"
+                      : scoreDelta < 0
+                      ? "O'tgan sessiyadan biroz past — yana urinib ko'ring"
+                      : "O'tgan sessiya bilan bir xil"}
+                  </p>
                 </div>
+                <span className="text-[11px] text-muted-foreground">
+                  Oxirgi {progressChartData.length} sessiya
+                </span>
               </div>
-              <p className="text-xs text-muted-foreground mb-3">Last {progressChartData.length} sessions</p>
               <ResponsiveContainer width="100%" height={110}>
                 <LineChart data={progressChartData} margin={{ top: 4, right: 6, bottom: 0, left: -24 }}>
                   <XAxis
@@ -594,13 +741,37 @@ function DashboardScreen() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+
+              <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                <div className="flex-1 flex items-center gap-2">
+                  <Trophy size={15} className="text-amber-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground tabular-nums leading-none">{bestScore}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Eng yaxshi</p>
+                  </div>
+                </div>
+                <div className="flex-1 flex items-center gap-2">
+                  <Activity size={15} className="text-blue-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground tabular-nums leading-none">{avgScore}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">O'rtacha</p>
+                  </div>
+                </div>
+                <div className="flex-1 flex items-center gap-2">
+                  <Mic size={15} className="text-green-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground tabular-nums leading-none">{sessions.length}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Sessiya</p>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="bg-card border border-border rounded-2xl p-4">
               <EmptyState
                 icon={<TrendingUp size={20} />}
-                title="No sessions yet"
-                description="Start practicing to see your progress chart here."
+                title="Hali sessiya yo'q"
+                description="Mashqni boshlang — rivojingiz shu yerda chiziqda ko'rinadi."
               />
             </div>
           )}
@@ -1622,73 +1793,23 @@ function AdminAnalytics() {
 }
 
 // Navbar Component
-function Navbar({ title, onMenuClick }: { title: string; onMenuClick: () => void }) {
+function Navbar({ title, dark, onToggleTheme }: { title: string; dark: boolean; onToggleTheme: () => void }) {
   return (
-    <div className="sticky top-0 z-40 bg-card border-b border-border px-4 py-3 flex items-center justify-between">
-      <button 
-        onClick={onMenuClick}
-        className="p-2 rounded-lg hover:bg-muted transition-colors"
-      >
-        <Menu size={22} />
-      </button>
-      <h1 className="text-lg font-bold text-foreground">{title}</h1>
-      <div className="w-10" /> {/* Spacer */}
-    </div>
-  );
-}
-
-// Sidebar Component
-function Sidebar({ 
-  isOpen, 
-  onClose, 
-  currentView, 
-  setView 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  currentView: View; 
-  setView: (v: View) => void;
-}) {
-  const navItems = [
-    { id: "dashboard", label: "Asosiy", Icon: TrendingUp },
-  ];
-
-  if (!isOpen) return null;
-
-  return (
-    <>
-      <div 
-        className="fixed inset-0 z-40 bg-black/50 animate-in fade-in" 
-        onClick={onClose}
-      />
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border shadow-xl animate-in slide-in-from-left">
-        <div className="px-6 py-5 border-b border-border">
-          <h2 className="text-xl font-bold text-foreground">SpeakFlow</h2>
-          <p className="text-xs text-muted-foreground">IELTS Speaking Coach</p>
+    <div className="sticky top-0 z-40 bg-card/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-sm shadow-blue-500/25">
+          <Mic size={16} className="text-white" />
         </div>
-        <nav className="p-3 space-y-1">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                setView(item.id as View);
-                onClose();
-              }}
-              className={`
-                w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all
-                ${currentView === item.id 
-                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-semibold" 
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }
-              `}
-            >
-              <item.Icon size={20} />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
+        <h1 className="text-lg font-bold text-foreground">{title}</h1>
       </div>
-    </>
+      <button
+        onClick={onToggleTheme}
+        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+        aria-label="Toggle theme"
+      >
+        {dark ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+    </div>
   );
 }
 
@@ -1699,7 +1820,6 @@ export default function App() {
   const [adminTab, setAdminTab] = useState<AdminTab>("overview");
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
   const [dark, setDark] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -1728,15 +1848,10 @@ export default function App() {
 
   return (
     <div className="font-['Inter'] antialiased min-h-screen bg-background">
-      <Sidebar 
-        isOpen={sidebarOpen} 
-        onClose={() => setSidebarOpen(false)} 
-        currentView={view} 
-        setView={setView} 
-      />
-      <Navbar 
-        title={getTitle()} 
-        onMenuClick={() => setSidebarOpen(true)} 
+      <Navbar
+        title={getTitle()}
+        dark={dark}
+        onToggleTheme={() => setDark((d) => !d)}
       />
       {/* Content (Telegram mini-app mobile-first) */}
       <div>
