@@ -855,7 +855,7 @@ function AdminLoginScreen({ onLogin }: { onLogin: () => void }) {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/v1/auth/admin", {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || "https://speakflow-backend-aj8x.onrender.com/api/v1"}/auth/admin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

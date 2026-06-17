@@ -1,4 +1,6 @@
-const API_BASE_URL = "http://localhost:8000/api/v1";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://speakflow-backend-aj8x.onrender.com/api/v1";
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem("adminToken");
